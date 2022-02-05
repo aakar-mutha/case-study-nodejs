@@ -2,11 +2,14 @@ const express = require('express');
 const app = express();
 const mongoose = require('mongoose');
 const cors = require('cors');
-
+const multer = require('multer');
 const dbURL = "mongodb+srv://aakar:1234@cluster0.tdqtc.mongodb.net/bajaj-task?retryWrites=true&w=majority"
 
+const user = require('./models/user');
+const cart = require('./models/cart');
+const product = require('./models/product');
+const orders = require('./models/orders');
 
-// app.listen(3000);
 app.use(express.json())
 app.use(cors())
 mongoose.connect(dbURL, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -21,47 +24,10 @@ app.listen(
     3000,
     () => { console.log("started at ", 3000) }
 )
-const user = mongoose.model("user", {
-    userId: {
-        type: String,
-        unique: true,
-        required: [true, ""],
-    },
-    fname: {
-        type: String,
-        // unique: true,
-        required: [true, "Please enter your name"],
-    },
-    lname: {
-        type: String,
-        // unique: true,
-        required: [true, "Please enter your name"],
-    },
-    email: {
-        type: String,
-        // unique: true,
-        required: [true, "Please enter your email"],
-    },
-    mobile: {
-        type: Number,
-        required: [true, "Please enter your mobile number"],
-        minlength: 10,
-        maxlength: 10,
-    },
-    password: {
-        type: String,
-        required: [true, "Please enter your password"],
-    },
-    role: {
-        type: String,
-        // required: [true, "Please enter your role"],
-        default: "user"
-    }
-})
 
 app.post('/signup', (req, res) => {
     const data = req.body;
-    // console.log(data)
+    console.log(data)
     id = Math.random().toString(16).slice(2);
     const user_data = new user({
         userId: id,
@@ -69,7 +35,6 @@ app.post('/signup', (req, res) => {
         lname: data.lname,
         email: data.email,
         mobile: data.mnum,
-        // password: bcrypt.hashSync(data.password, saltRounds),
         password: data.pass,
         role: data.role
     })
@@ -94,7 +59,6 @@ app.get('/login', (req, res) => {
 
     const findResult = user.find({
         email: data.email,
-        // password: bcrypt.hashSync(data.password, saltRounds).toString(),
         password: data.pass
 
     },
@@ -119,20 +83,9 @@ app.get('/login', (req, res) => {
                 { res.status(201).send(tosend) }
             }
         })
-    // console.log(findResult);
 });
 
 
-const cart = mongoose.model("cart", {
-    userId: {
-        type: String,
-        unique: true,
-        required: [true, ""],
-    },
-    products: {
-        type: Array,
-    }
-})
 
 app.post('/carts', (req, res) => {
     const data = req.body;
@@ -157,7 +110,6 @@ app.post('/carts', (req, res) => {
             }
             else {
                 flag = 0;
-                // result[0].products.forEach(element => { data.products.push(element)});
                 for(var i = 0; i < data.products.length; i++){
                     for(var j = 0; j < result[0].products.length; j++){
                         if(data.products[i].productId == result[0].products[j].productId){
@@ -190,7 +142,6 @@ app.get('/carts', (req, res) => {
             res.status(404).send("Cart is Empty");
         }
         else {
-            // console.log(result);
             res.status(201).send(result);
         }
     })
@@ -199,7 +150,6 @@ app.get('/carts', (req, res) => {
 app.post('/carts/delete', (req, res) => {
     const data = req.body;
     var finalcart = [];
-    // console.log(data[0])
     var findResult = cart.find({
         userId: data.userId
     }, (error, result) => {
@@ -209,7 +159,7 @@ app.post('/carts/delete', (req, res) => {
         }
         else {
             console.log(data.products);
-            // console.log()
+
             if (data.products.length > 0) {
                 for (var i = 0; i < data.products.length; i++) {
                     var d = {
@@ -227,32 +177,34 @@ app.post('/carts/delete', (req, res) => {
     })
 })
 
-const product = mongoose.model("product", {
-    userId: {
-        type: String,
-        required: [true, ""],
+var loc;
+var storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+       cb(null, './uploads');
     },
-    productId:{
-        type: String,
-        required: [true, ""],
-    },
-    title: {
-        type: String,
-        required: [true, ""],
-    },
-    description: {
-        type: String,
-        required: [true, ""],
-    },
-    price: {
-        type: String,
-        required: [true, ""],
-    },
-    image: {
-        type: String,
-        // required: [true, ""],
+    filename: function (req, file, cb) {
+        loc = file.originalname
+       cb(null,loc );
     }
+ });
+ var upload = multer({ storage: storage });
+ 
+ app.post('/product/image-upload', upload.single('image'),(req, res) => {
+    const image = req.image;
+    console.log(image)
+      res.send(apiResponse({path:"http://localhost:3000/uploads/" + loc, image}));
+  });
+  function apiResponse(results){
+    return JSON.stringify({"status": 200, "error": null, "response": results});
+}  
+
+app.get('/uploads/:filename', function (req, res) {
+    const filePath = "./uploads/"+req.params.filename;
+    res.sendFile(filePath , { root: __dirname });
+    console.log(filePath);
+
 });
+
 
 app.post('/products',(req,res)=>{
     id = Math.random().toString(16).slice(2);
@@ -309,4 +261,73 @@ app.post('/products/update',(req,res)=>{
     res.status(200).send({
         message: 'Product Updated Successfully',
     })
+});
+
+app.post('/products/delete',(req,res)=>{
+    const data = req.body;
+    console.log(data)
+    product.deleteOne({ productId: data.productId }, (error, result) => { });
+    res.status(200).send({
+        message: 'Product Deleted Successfully',
+    })
+});
+
+app.post('/carts/pay', (req, res) => {
+    const data = req.body;
+    console.log(data)
+    id = Math.random().toString(16).slice(2);
+    const order_data = new orders({
+        userId: data.userId,
+        orderId: id,
+        products: data.products,
+        amount: data.total,
+    })
+    
+    try {
+        order_data.save()
+    }
+    catch (e) {
+        console.log("this is error in try block", e)
+    }
+    res.status(200).send({
+        message: 'Order Placed Successfully',
+    })
+    cart.deleteMany({ userId: data.userId }, (error, result) => { });
+    
+});
+
+
+app.get('/totalsales', (req, res) => {
+    const data = req.query;
+    prods = [];
+    var findproductids = product.find({
+        userId: data.userId
+    }, (error, result) => {
+        if(error || result.length == 0){
+            // res.status(404).send("No Products");
+        }
+        else{
+            // console.log(result)
+                 result.forEach(element => {
+                     console.log(element['productId'])
+                        prods.push(element['productId'])
+                    }
+                )
+
+                var findResult = orders.find({
+                    'products.productId': { $in: prods }
+            
+                }, (error, result) => {
+                    console.log(result)
+                    if (error || result.length == 0) {
+                        // res.status(404).send("No Products");
+                    }
+                    else {
+                        
+                        res.status(201).send(result);
+                    }
+                })
+        }
+    });
+    
 });
